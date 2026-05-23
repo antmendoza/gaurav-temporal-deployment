@@ -1,0 +1,48 @@
+server:
+  config:
+    persistence:
+      defaultStore: default
+      visibilityStore: visibility
+      numHistoryShards: 512
+      datastores:
+        default:
+          sql:
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal
+            connectAddr: "temporal-dev-db.cfqccq4scof6.ap-southeast-2.rds.amazonaws.com:5432"
+            connectProtocol: tcp
+            user: temporal
+            existingSecret: temporal-db
+            secretKey: password
+            maxConns: 20
+            maxIdleConns: 20
+            maxConnLifetime: "1h"
+            createDatabase: false
+            manageSchema: true
+            tls:
+              enabled: true
+              enableHostVerification: false
+        visibility:
+          sql:
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal_visibility
+            connectAddr: "temporal-dev-db.cfqccq4scof6.ap-southeast-2.rds.amazonaws.com:5432"
+            connectProtocol: tcp
+            user: temporal
+            existingSecret: temporal-db
+            secretKey: password
+            maxConns: 10
+            maxIdleConns: 10
+            maxConnLifetime: "1h"
+            createDatabase: true
+            manageSchema: true
+            tls:
+              enabled: true
+              enableHostVerification: false
+    namespaces:
+      create: true
+      namespace:
+        - name: default
+          retention: 3d

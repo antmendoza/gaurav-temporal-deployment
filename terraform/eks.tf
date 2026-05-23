@@ -11,12 +11,34 @@ module "eks" {
   endpoint_public_access                   = true
   enable_cluster_creator_admin_permissions = true
 
+  addons = {
+    vpc-cni = {
+      before_compute = true
+    }
+    kube-proxy = {}
+    coredns    = {}
+  }
+
   eks_managed_node_groups = {
     default = {
       instance_types = ["t3.small"]
       min_size       = 1
       max_size       = 3
       desired_size   = 2
+    }
+  }
+
+  access_entries = {
+    admin_role = {
+      principal_arn = aws_iam_role.eks_admin.arn
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
     }
   }
 }
