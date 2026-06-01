@@ -15,8 +15,9 @@ module "eks" {
     vpc-cni = {
       before_compute = true
     }
-    kube-proxy = {}
-    coredns    = {}
+    kube-proxy              = {}
+    coredns                 = {}
+    eks-pod-identity-agent  = {}
   }
 
   eks_managed_node_groups = {

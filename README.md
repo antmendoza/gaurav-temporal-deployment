@@ -4,7 +4,10 @@ Deploy Temporal to AWS EKS.
 
 ## Layout
 
-- `terraform/` — VPC and a small EKS cluster
+- `terraform/cluster/` — VPC, EKS, RDS, IAM
+- `terraform/serverless-worker/` — Lambda + IAM role Temporal can assume to invoke it
+- `worker/` — Lambda handler source (zipped at apply time)
+- `helm/` — values + scripts for installing Temporal via Helm
 - `helm-charts/` — git subtree of [temporalio/helm-charts](https://github.com/temporalio/helm-charts) (`main`, squashed)
 
 ## Updating the helm-charts subtree
@@ -24,7 +27,7 @@ git subtree pull --prefix=helm-charts git@github.com:temporalio/helm-charts.git 
 ## Bring up the cluster
 
 ```sh
-cd terraform
+cd terraform/cluster
 terraform init
 terraform apply
 aws eks update-kubeconfig --name temporal-dev --region ap-southeast-2 \
@@ -39,7 +42,7 @@ below for why.
 ## Tear down
 
 ```sh
-cd terraform
+cd terraform/cluster
 terraform destroy
 ```
 

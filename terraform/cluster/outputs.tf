@@ -30,3 +30,11 @@ output "db_password" {
   value     = random_password.db.result
   sensitive = true
 }
+
+output "temporal_pod_identity_role_arn" {
+  value = aws_iam_role.temporal_pod_identity.arn
+}
+
+output "temporal_pod_identity_role_name" {
+  value = aws_iam_role.temporal_pod_identity.name
+}
