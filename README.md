@@ -4,6 +4,7 @@ Deploy Temporal to AWS EKS.
 
 ## Layout
 
+- `terraform/bootstrap/` — S3 bucket holding remote state for the other two modules (local state, applied once)
 - `terraform/cluster/` — VPC, EKS, RDS, IAM
 - `terraform/serverless-worker/` — Lambda + IAM role Temporal can assume to invoke it
 - `worker/` — Lambda handler source (zipped at apply time)
@@ -21,8 +22,26 @@ git subtree pull --prefix=helm-charts git@github.com:temporalio/helm-charts.git 
 ## Prerequisites
 
 - AWS CLI configured (`aws configure`)
-- Terraform >= 1.5
+- Terraform >= 1.10 (for native S3 state locking via `use_lockfile`)
 - kubectl
+
+## Bootstrap remote state
+
+`cluster/` and `serverless-worker/` both write state to S3 bucket
+`temporal-dev-tfstate` in `ap-southeast-2`. Create it once before initializing
+the other modules:
+
+```sh
+cd terraform/bootstrap
+terraform init
+terraform apply
+```
+
+The bootstrap module itself uses local state — its only resource is the bucket,
+and if you ever lose the state file you can re-import the bucket. Change the
+default `bucket_name` (in `terraform/bootstrap/variables.tf`) if you hit an S3
+global-namespace collision, and update the matching `bucket = ...` lines in
+`terraform/cluster/versions.tf` and `terraform/serverless-worker/versions.tf`.
 
 ## Bring up the cluster
 
@@ -38,6 +57,29 @@ kubectl get nodes
 The `--role-arn` flag bakes the `temporal-dev-eks-admin` role into the kubeconfig's
 exec plugin, so `kubectl` auto-assumes it on every call. See "EKS admin access"
 below for why.
+
+## Deploy Temporal
+
+```sh
+./helm/deploy.sh
+```
+
+The script:
+
+1. Runs `aws eks update-kubeconfig` against the `temporal-dev` cluster, baking
+   in the `eks_admin_role_arn` from the cluster Terraform output so subsequent
+   `kubectl`/`helm` calls auto-assume the admin role.
+2. Creates the `temporal` namespace if missing.
+3. Syncs the `temporal-db` secret from the `db_password` Terraform output.
+4. `helm upgrade --install`s the chart from the vendored subtree with
+   `helm/values.yaml`.
+
+Idempotent — safe to re-run. `CLUSTER_NAME`, `REGION`, `NAMESPACE`, and
+`RELEASE` are overridable via env vars.
+
+`helm/values.yaml` exposes both the frontend gRPC service and the Web UI as
+internet-facing NLBs. The script prints the Web UI hostname at the end; open
+`http://<hostname>:8080` in a browser.
 
 ## Tear down
 

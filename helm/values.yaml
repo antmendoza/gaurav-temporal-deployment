@@ -5,6 +5,7 @@ server:
       annotations:
         service.beta.kubernetes.io/aws-load-balancer-type: nlb
         service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+        service.beta.kubernetes.io/load-balancer-source-ranges: "61.14.107.53/32,104.28.24.190/32"
   config:
     persistence:
       defaultStore: default
@@ -52,3 +53,11 @@ server:
       namespace:
         - name: default
           retention: 3d
+
+web:
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: nlb
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      service.beta.kubernetes.io/load-balancer-source-ranges: "61.14.107.53/32,104.28.24.190/32"
