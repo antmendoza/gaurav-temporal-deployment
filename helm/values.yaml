@@ -5,7 +5,7 @@ server:
       annotations:
         service.beta.kubernetes.io/aws-load-balancer-type: nlb
         service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
-        service.beta.kubernetes.io/load-balancer-source-ranges: "61.14.107.53/32,104.28.24.190/32"
+        service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32"
   config:
     persistence:
       defaultStore: default
@@ -53,6 +53,13 @@ server:
       namespace:
         - name: default
           retention: 3d
+  dynamicConfig:
+    history.enableTransitionHistory:
+      - value: true
+    history.enableChasm:
+      - value: true
+    activity.enableStandalone:
+      - value: true
 
 web:
   service:
@@ -60,4 +67,7 @@ web:
     annotations:
       service.beta.kubernetes.io/aws-load-balancer-type: nlb
       service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
-      service.beta.kubernetes.io/load-balancer-source-ranges: "61.14.107.53/32,104.28.24.190/32"
+      service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32"
+  additionalEnv:
+    - name: TEMPORAL_CSRF_COOKIE_INSECURE
+      value: "true"
