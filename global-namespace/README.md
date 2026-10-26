@@ -30,54 +30,41 @@ both deployments behave as standalone installs.
 Terminal **AWS**:
 
 ```sh
-# is the name of the profile in `~/.aws/config`
-export AWS_PROFILE=<your-sso-profile> 
-
-#is the AWS region to deploy to
-export AWS_REGION=eu-west-3 
-
-#is the region Terraform uses for the VPC
+export AWS_PROFILE=<your-sso-profile>
+export AWS_REGION=eu-west-3
 export TF_VAR_region=$AWS_REGION
-
-#Overrides the region the script passes to aws eks update-kubeconfig. 
-export REGION=$AWS_REGION  
-
-# suffix to append to every resource name to make them unique
-export TF_VAR_name_suffix=<suffix>  
-
-#The file kubectl reads and writes for clusters and contexts.
-export KUBECONFIG=~/.kube/config-aws 
-
-# login to AWS
+export REGION=$AWS_REGION
+export TF_VAR_name_suffix=<suffix>
+export KUBECONFIG=~/.kube/config-aws
 aws sso login && aws sts get-caller-identity
 ```
 
-
-
-
+| Variable | Purpose |
+|---|---|
+| `AWS_PROFILE` | SSO profile name in `~/.aws/config` |
+| `AWS_REGION` | AWS region to deploy to; used by the `aws` CLI and the Terraform backend |
+| `TF_VAR_region` | Region Terraform deploys everything into (defaults to `ap-southeast-2` if unset) |
+| `REGION` | Optional. Overrides the region `helm/deploy.sh` passes to `aws eks update-kubeconfig` |
+| `TF_VAR_name_suffix` | Appended to every resource name. Keep it the same on every apply, since changing it destroys and recreates |
+| `KUBECONFIG` | Per-terminal kubeconfig, so the two clouds' contexts don't clash |
 
 Terminal **GCP**:
 
 ```sh
-
-# login to gcloud
 gcloud auth login && gcloud auth application-default login
-
-#The file kubectl reads and writes for clusters and contexts.
-export KUBECONFIG=~/.kube/config-gcp 
-
-
-#gcp project id, the project has to exist 
+export KUBECONFIG=~/.kube/config-gcp
 export TF_VAR_project_id=dse-demos
 gcloud config set project "$TF_VAR_project_id"
-
-#gcp region to deploy to 
-export TF_VAR_region=europe-west1 
-
-#suffix to append to every resource name to make them unique
-export TF_VAR_name_suffix=<suffix> 
-
+export TF_VAR_region=europe-west1
+export TF_VAR_name_suffix=<suffix>
 ```
+
+| Variable | Purpose |
+|---|---|
+| `KUBECONFIG` | Per-terminal kubeconfig, so the two clouds' contexts don't clash |
+| `TF_VAR_project_id` | GCP project to deploy into; it must already exist |
+| `TF_VAR_region` | Region Terraform deploys everything into |
+| `TF_VAR_name_suffix` | Appended to every resource name. Keep it the same on every apply, since changing it destroys and recreates |
 
 Each terminal gets its own kubeconfig, so `get-credentials` / `update-kubeconfig` in one can't
 switch the other's context.
@@ -230,18 +217,20 @@ kubectl -n temporal exec deploy/temporal-admintools -- \
 Java workers in both clouds, a long-running workflow, and a failover mid-run: see
 [`demo/README.md`](demo/README.md).
 
-
 ## See the workflows in the UI
 
-Either cluster's Temporal Web UI is accessible at <ip>:8080. The port is forwarded to the
-cluster's service:
+Each cluster's Web UI is on its own load balancer, port 8080:
 
 ```sh
-kubectl -n temporal port-forward svc/temporal-web 8080:8080
+# terminal AWS: NLB hostname
+kubectl -n temporal get svc temporal-web -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+
+# terminal GCP: IP
+kubectl -n temporal get svc temporal-web -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 ```
-and access the replicated namespace: http://localhost:8080/namespaces/replicated/workflows
 
-
+Open `http://<address>:8080/namespaces/replicated/workflows`. If your IP isn't in the allowlist,
+run `kubectl -n temporal port-forward svc/temporal-web 8080:8080` and use `localhost:8080` instead.
 
 ## Monitor replication lag
 
