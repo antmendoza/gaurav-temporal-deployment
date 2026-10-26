@@ -1,5 +1,8 @@
 # Global namespaces: AWS ⇄ GCP
 
+> This guide assumes you have access to AWS and GCP accounts.
+
+
 End-to-end guide: deploy Temporal on AWS (EKS) and GCP (GKE) as two replicated clusters, then
 create a global namespace and fail it over between clouds.
 
@@ -27,21 +30,53 @@ both deployments behave as standalone installs.
 Terminal **AWS**:
 
 ```sh
-export AWS_PROFILE=<your-sso-profile>
-export AWS_REGION=eu-west-3 TF_VAR_region=eu-west-3 REGION=eu-west-3
-export TF_VAR_name_suffix=antonio
-export KUBECONFIG=~/.kube/config-aws
+# is the name of the profile in `~/.aws/config`
+export AWS_PROFILE=<your-sso-profile> 
+
+#is the AWS region to deploy to
+export AWS_REGION=eu-west-3 
+
+#is the region Terraform uses for the VPC
+export TF_VAR_region=$AWS_REGION
+
+#Overrides the region the script passes to aws eks update-kubeconfig. 
+export REGION=$AWS_REGION  
+
+# suffix to append to every resource name to make them unique
+export TF_VAR_name_suffix=<suffix>  
+
+#The file kubectl reads and writes for clusters and contexts.
+export KUBECONFIG=~/.kube/config-aws 
+
+# login to AWS
 aws sso login && aws sts get-caller-identity
 ```
+
+
+
+
 
 Terminal **GCP**:
 
 ```sh
+
+# login to gcloud
 gcloud auth login && gcloud auth application-default login
-export TF_VAR_project_id=dse-demos TF_VAR_region=europe-west1
-export TF_VAR_name_suffix=antonio
-export KUBECONFIG=~/.kube/config-gcp
+
+#The file kubectl reads and writes for clusters and contexts.
+export KUBECONFIG=~/.kube/config-gcp 
+
+
+#gcp project id, the project has to exist 
+export TF_VAR_project_id=dse-demos
 gcloud config set project "$TF_VAR_project_id"
+
+#gcp region to deploy to 
+export TF_VAR_region=europe-west1 
+
+#suffix to append to every resource name to make them unique
+export TF_VAR_name_suffix=<suffix> 
+
 ```
 
 Each terminal gets its own kubeconfig, so `get-credentials` / `update-kubeconfig` in one can't
@@ -194,6 +229,19 @@ kubectl -n temporal exec deploy/temporal-admintools -- \
 
 Java workers in both clouds, a long-running workflow, and a failover mid-run: see
 [`demo/README.md`](demo/README.md).
+
+
+## See the workflows in the UI
+
+Either cluster's Temporal Web UI is accessible at <ip>:8080. The port is forwarded to the
+cluster's service:
+
+```sh
+kubectl -n temporal port-forward svc/temporal-web 8080:8080
+```
+and access the replicated namespace: http://localhost:8080/namespaces/replicated/workflows
+
+
 
 ## Monitor replication lag
 
