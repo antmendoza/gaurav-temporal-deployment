@@ -12,10 +12,9 @@ terraform {
     }
   }
 
+  # bucket and region come from -backend-config; see "Bootstrap remote state".
   backend "s3" {
-    bucket       = "temporal-dev-tfstate"
     key          = "serverless-worker.tfstate"
-    region       = "ap-southeast-2"
     encrypt      = true
     use_lockfile = true
   }

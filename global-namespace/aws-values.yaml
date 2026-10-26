@@ -1,0 +1,22 @@
+server:
+  frontend:
+    service:
+      annotations:
+        # base allowlist + GCP Cloud NAT egress, for replication
+        service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32,104.28.191.43/32,104.28.25.150/32,<GCP_NAT_IP>/32"
+  config:
+    clusterMetadata:
+      enableGlobalNamespace: true
+      failoverVersionIncrement: 10
+      masterClusterName: aws
+      currentClusterName: aws
+      clusterInformation:
+        aws:
+          enabled: true
+          initialFailoverVersion: 1
+          rpcName: frontend
+          rpcAddress: "127.0.0.1:7233"
+          httpAddress: "127.0.0.1:7243"
+    dcRedirectionPolicy:
+      policy: selected-apis-forwarding
+      toDC: ""

@@ -8,9 +8,14 @@ variable "cluster_name" {
   default = "temporal-dev"
 }
 
+variable "name_suffix" {
+  type        = string
+  description = "Suffix for globally-scoped names (IAM roles), e.g. your name. Press Enter to use the region."
+}
+
 variable "kubernetes_version" {
   type    = string
-  default = "1.35"
+  default = "1.36"
 }
 
 variable "temporal_namespace" {

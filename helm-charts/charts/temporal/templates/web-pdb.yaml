@@ -3,11 +3,12 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
+  namespace: {{ include "temporal.kubernetesNamespace" $ }}
   name: {{ include "temporal.componentname" (list $ "web") }}-pdb
   labels:
     {{- include "temporal.resourceLabels" (list $ "web" "") | nindent 4 }}
 spec:
-  {{ toYaml $.Values.web.podDisruptionBudget }}
+  {{- toYaml $.Values.web.podDisruptionBudget | nindent 2 }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "temporal.name" $ }}

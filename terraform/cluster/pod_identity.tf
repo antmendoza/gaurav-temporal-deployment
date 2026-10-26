@@ -1,7 +1,7 @@
 # Base AWS identity for Temporal pods. Downstream workload modules
 # (e.g. serverless-worker) attach AssumeRole permissions onto this role.
 resource "aws_iam_role" "temporal_pod_identity" {
-  name = "temporal-pod-identity"
+  name = "${local.name}-pod-identity"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

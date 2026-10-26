@@ -1,6 +1,10 @@
+{{- /* The health check always connects to the external frontend, so it uses the
+frontend TLS section (empty unless frontend TLS is enabled). */}}
+{{- $tlsSection := include "temporal.adminClient.tls.section" (list . false) }}
 apiVersion: v1
 kind: Pod
 metadata:
+  namespace: {{ include "temporal.kubernetesNamespace" . }}
   name: "{{ include "temporal.fullname" . }}-test-cluster-health"
   labels:
     {{- include "temporal.resourceLabels" (list $ "test" "") | nindent 4 }}
@@ -13,7 +17,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
-  {{ include "temporal.serviceAccount" . }}
+  {{ include "temporal.componentServiceAccount" (list $ "test") }}
   containers:
   - name: cluster-health
     image: "{{ .Values.admintools.image.repository }}:{{ .Values.admintools.image.tag }}"
@@ -22,6 +26,13 @@ spec:
     env:
       - name: TEMPORAL_ADDRESS
         value: {{ include "temporal.fullname" . }}-frontend:{{ .Values.server.frontend.service.port }}
+      {{- if $tlsSection }}
+      {{- include "temporal.adminClient.tls.env" (list . $tlsSection) | nindent 6 }}
+      {{- end }}
+    {{- if $tlsSection }}
+    volumeMounts:
+      {{- include "temporal.adminClient.tls.volumeMounts" (list . $tlsSection) | nindent 6 }}
+    {{- end }}
     {{- with .Values.test.resources }}
     resources:
       {{- toYaml . | nindent 6 }}
@@ -41,5 +52,9 @@ spec:
   {{- with .Values.test.tolerations }}
   tolerations:
     {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $tlsSection }}
+  volumes:
+    {{- include "temporal.adminClient.tls.volumes" (list . $tlsSection) | nindent 4 }}
   {{- end }}
   restartPolicy: Never

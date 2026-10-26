@@ -8,13 +8,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: {{ include "temporal.kubernetesNamespace" $ }}
   name: {{ include "temporal.componentname" (list $ $service) }}
   annotations:
     {{- include "temporal.resourceAnnotations" (list $ $service "deployment") | nindent 4 }}
   labels:
     {{- include "temporal.resourceLabels" (list $ $service "deployment") | nindent 4 }}
 spec:
-  replicas: {{ default $.Values.server.replicaCount $serviceValues.replicaCount }}
+  {{- if $serviceValues.replicaCount }}
+  replicas: {{ $serviceValues.replicaCount }}
+  {{- else if $.Values.server.replicaCount }}
+  replicas: {{ $.Values.server.replicaCount }}
+  {{- end }}
   {{- with (default $.Values.server.deploymentStrategy $serviceValues.deploymentStrategy) }}
   strategy:
   {{- toYaml . | nindent 4 }}
@@ -41,7 +46,7 @@ spec:
       labels:
         {{- include "temporal.resourceLabels" (list $ $service "pod") | nindent 8 }}
     spec:
-      {{ include "temporal.serviceAccount" $ }}
+      {{ include "temporal.componentServiceAccount" (list $ $service) }}
       {{- with $.Values.server.securityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -118,7 +123,11 @@ spec:
             - name: metrics
               containerPort: 9090
               protocol: TCP
-          {{- if ne $service "worker" }}
+          {{- $resolvedLiveness := default $.Values.server.livenessProbe $serviceValues.livenessProbe }}
+          {{- if $resolvedLiveness }}
+          livenessProbe:
+          {{- toYaml $resolvedLiveness | nindent 12 }}
+          {{- else if ne $service "worker" }}
           livenessProbe:
             initialDelaySeconds: 150
             tcpSocket:
@@ -147,6 +156,9 @@ spec:
             {{- end }}
             {{- if $.Values.server.additionalVolumeMounts }}
             {{- toYaml $.Values.server.additionalVolumeMounts | nindent 12}}
+            {{- end }}
+            {{- if or $.Values.server.tls.internode.enabled $.Values.server.tls.frontend.enabled }}
+            {{- include "temporal.server.tls.volumeMounts" $ | nindent 12 }}
             {{- end }}
           resources:
             {{- toYaml (default $.Values.server.resources $serviceValues.resources) | nindent 12 }}
@@ -177,6 +189,9 @@ spec:
         {{- if $.Values.server.additionalVolumes }}
         {{- toYaml $.Values.server.additionalVolumes | nindent 8}}
         {{- end }}
+        {{- if or $.Values.server.tls.internode.enabled $.Values.server.tls.frontend.enabled }}
+        {{- include "temporal.server.tls.volumes" $ | nindent 8 }}
+        {{- end }}
       {{- with (default $.Values.server.nodeSelector $serviceValues.nodeSelector) }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -192,6 +207,15 @@ spec:
     {{- with $serviceValues.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with (default $.Values.server.schedulerName $serviceValues.schedulerName) }}
+      schedulerName: {{ . }}
+    {{- end }}
+    {{- with (default $.Values.server.runtimeClassName $serviceValues.runtimeClassName) }}
+      runtimeClassName: {{ . }}
+    {{- end }}
+    {{- with (default $.Values.server.priorityClassName $serviceValues.priorityClassName) }}
+      priorityClassName: {{ . }}
     {{- end }}
       terminationGracePeriodSeconds: {{ default $.Values.server.terminationGracePeriodSeconds $serviceValues.terminationGracePeriodSeconds }}
 ---

@@ -1,0 +1,69 @@
+server:
+  frontend:
+    service:
+      type: LoadBalancer
+      annotations:
+        service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32,104.28.191.43/32,104.28.25.150/32"
+  config:
+    persistence:
+      defaultStore: default
+      visibilityStore: visibility
+      numHistoryShards: 512
+      datastores:
+        default:
+          sql:
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal
+            connectAddr: ""  # set by deploy.sh from terraform output db_host
+            connectProtocol: tcp
+            user: temporal
+            existingSecret: temporal-db
+            secretKey: password
+            maxConns: 20
+            maxIdleConns: 20
+            maxConnLifetime: "1h"
+            createDatabase: false
+            manageSchema: true
+            tls:
+              enabled: true
+              enableHostVerification: false
+        visibility:
+          sql:
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal_visibility
+            connectAddr: ""  # set by deploy.sh from terraform output db_host
+            connectProtocol: tcp
+            user: temporal
+            existingSecret: temporal-db
+            secretKey: password
+            maxConns: 10
+            maxIdleConns: 10
+            maxConnLifetime: "1h"
+            createDatabase: true
+            manageSchema: true
+            tls:
+              enabled: true
+              enableHostVerification: false
+    namespaces:
+      create: true
+      namespace:
+        - name: default
+          retention: 3d
+  dynamicConfig:
+    history.enableTransitionHistory:
+      - value: true
+    history.enableChasm:
+      - value: true
+    activity.enableStandalone:
+      - value: true
+
+web:
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32,104.28.191.43/32,104.28.25.150/32"
+  additionalEnv:
+    - name: TEMPORAL_CSRF_COOKIE_INSECURE
+      value: "true"

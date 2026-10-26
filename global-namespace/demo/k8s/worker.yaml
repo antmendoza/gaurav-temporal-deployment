@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: failover-worker
+  namespace: temporal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: failover-worker
+  template:
+    metadata:
+      labels:
+        app: failover-worker
+    spec:
+      containers:
+        - name: worker
+          image: ${IMAGE}
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: temporal-frontend.temporal.svc.cluster.local:7233
+            - name: TEMPORAL_NAMESPACE
+              value: replicated
+            - name: TASK_QUEUE
+              value: replicated-demo
+            - name: CLOUD
+              value: ${CLOUD}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi

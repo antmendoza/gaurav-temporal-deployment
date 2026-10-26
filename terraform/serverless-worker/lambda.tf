@@ -5,7 +5,7 @@ data "archive_file" "handler" {
 }
 
 resource "aws_lambda_function" "worker" {
-  function_name = var.function_name
+  function_name = local.name
   role          = aws_iam_role.lambda_exec.arn
   runtime       = "python3.12"
   handler       = "handler.handler"

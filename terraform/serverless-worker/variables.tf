@@ -8,6 +8,16 @@ variable "function_name" {
   default = "temporal-worker"
 }
 
+variable "state_bucket" {
+  type        = string
+  description = "S3 bucket holding the cluster module's state. Same value as the -backend-config bucket; export TF_VAR_state_bucket=\"$TF_STATE_BUCKET\"."
+}
+
+variable "name_suffix" {
+  type        = string
+  description = "Suffix for globally-scoped names (IAM roles), e.g. your name. Press Enter to use the region."
+}
+
 variable "external_id" {
   type        = string
   description = "ExternalId the caller must present when assuming the worker role. Configure the matching value in whoever invokes the role (Temporal Cloud namespace, IRSA-bound worker, etc.)."

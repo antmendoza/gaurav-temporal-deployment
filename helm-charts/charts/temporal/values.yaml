@@ -22,11 +22,13 @@ server:
   enabled: true
   image:
     repository: temporalio/server
-    tag: 1.31.0
+    tag: 1.32.0
     pullPolicy: IfNotPresent
   # Global default settings (can be overridden per service)
-  replicaCount: 1
-  readinessProbe: {}
+  # replicaCount: 1
+  # readinessProbe: {}
+  # A value replaces the built-in tcpSocket probe whole.
+  # livenessProbe: {}
   metrics:
     # Annotate pods and services directly with the following Prometheus annotations.
     # prometheus.io/job
@@ -84,6 +86,10 @@ server:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  # Default scheduling values for all server services. Each service can override these below.
+  schedulerName: ""
+  runtimeClassName: ""
+  priorityClassName: ""
   minReadySeconds: 0
   terminationGracePeriodSeconds: null
   additionalVolumes: []
@@ -91,16 +97,55 @@ server:
   additionalEnv: []
   additionalEnvSecretName: ""
   additionalEnvConfigMapName: ""
+  # Wire TLS for the Temporal server without hand-writing volumes, mounts and
+  # config.tls. Point each section at an existing kubernetes.io/tls secret
+  # (tls.crt + tls.key, plus ca.crt for verification). The secret can come from
+  # cert-manager, external-secrets, or be created by hand; the chart does not
+  # create it. Enabling a section mounts the secret and generates the matching
+  # `server.config.tls` block. Anything you set under `server.config.tls` is
+  # deep-merged on top, so individual fields remain overridable.
+  tls:
+    internode:
+      enabled: false
+      # Existing secret with tls.crt, tls.key and ca.crt for internode traffic.
+      secretName: ""
+      # Where the secret is mounted in the server containers.
+      mountPath: /etc/temporal/tls/internode
+      # Require and verify client certificates on internode connections.
+      requireClientAuth: true
+      # DNS name clients expect in the server certificate (a SAN on the cert).
+      # Host verification is always on for internode, so this is required when
+      # internode.enabled is true.
+      serverName: ""
+    frontend:
+      enabled: false
+      secretName: ""
+      mountPath: /etc/temporal/tls/frontend
+      # Require and verify client certificates on frontend connections (mutual
+      # TLS). The chart's own CLI pods (admintools, namespace job, health check)
+      # and the Web UI present a client certificate automatically; the internal
+      # server components present the internode certificate, so enable
+      # server.tls.internode and issue every certificate from a CA the frontend
+      # trusts when turning this on.
+      requireClientAuth: false
+      # DNS name clients expect in the frontend certificate (a SAN on the cert).
+      # Required when frontend.enabled is true.
+      serverName: ""
   # for sidecar containers, add containers here with restartPolicy: Always
   additionalInitContainers: []
+  # publicClientHostPort: "temporal-frontend.example.svc:7233"
   securityContext:
     fsGroup: 1000
     runAsUser: 1000
   config:
     logLevel: "debug,info"
     # Define your TLS configuration here. See https://docs.temporal.io/references/configuration#tls
-    # for configuration options. You must also use `server.additionalVolumeMounts` and `server.additionalVolumes`
-    # to mount certificates (from Secret or ConfigMap etc) to the path you use below.
+    # for configuration options. For most setups prefer the `server.tls` stanza
+    # above, which mounts the certificates and generates this block for you; use
+    # this only for advanced fields or to override what `server.tls` generates.
+    # If you configure TLS here directly you must also use
+    # `server.additionalVolumeMounts` and `server.additionalVolumes` to mount the
+    # certificates to the paths you reference below.
     # tls:
     #   internode:
     #     server:
@@ -251,6 +296,17 @@ server:
     namespaces:
       # Enable this to create namespaces
       create: false
+      # The namespace-setup job is a one-off admin tools invocation. Like the
+      # admin tools (see admintools.useExternalFrontend) it connects to the
+      # internal-frontend when that is enabled, which grants admin without an
+      # external Authorizer. Set this to true to route it through the external
+      # frontend instead (e.g. when the frontend has an Authorizer and you can
+      # authenticate the job rather than relying on the internal-frontend bypass).
+      useExternalFrontend: false
+      # Use Helm hooks to ensure namespace creation runs as a post-install/post-upgrade step,
+      # after the frontend is created, and is cleaned up automatically on the next release.
+      # Set to false if using Flux, Rancher or Terraform.
+      useHelmHooks: true
       namespace:
         - name: default
           retention: 3d
@@ -269,6 +325,7 @@ server:
     # Defaults to a tcpSocket probe; uncomment below for a gRPC probe.
     # gRPC probes don't yet support TLS (kubernetes/enhancements#4939), so opt in only when TLS is off.
     readinessProbe: {}
+    livenessProbe: {}
     # readinessProbe:
     #   grpc:
     #     port: 7233
@@ -308,7 +365,15 @@ server:
     additionalEnv: []
     containerSecurityContext: {}
     topologySpreadConstraints: []
+    schedulerName: ""
+    runtimeClassName: ""
+    priorityClassName: ""
     podDisruptionBudget: {}
+    serviceAccount: {}
+    # serviceAccount:
+    #   create: false
+    #   name: "frontend-service-account"
+    #   extraAnnotations: {}
   internal-frontend:
     # Enable this to create internal-frontend
     enabled: false
@@ -325,6 +390,7 @@ server:
     # Defaults to a tcpSocket probe; uncomment below for a gRPC probe.
     # gRPC probes don't yet support TLS (kubernetes/enhancements#4939), so opt in only when TLS is off.
     readinessProbe: {}
+    livenessProbe: {}
     # readinessProbe:
     #   grpc:
     #     port: 7236
@@ -349,7 +415,11 @@ server:
     additionalEnv: []
     containerSecurityContext: {}
     topologySpreadConstraints: []
+    schedulerName: ""
+    runtimeClassName: ""
+    priorityClassName: ""
     podDisruptionBudget: {}
+    serviceAccount: {}
   history:
     enabled: true
     service:
@@ -359,6 +429,7 @@ server:
       membershipPort: 6934
       membershipAppProtocol: tcp
     readinessProbe: {}
+    livenessProbe: {}
     metrics:
       annotations:
         enabled: true
@@ -379,7 +450,11 @@ server:
     additionalEnv: []
     containerSecurityContext: {}
     topologySpreadConstraints: []
+    schedulerName: ""
+    runtimeClassName: ""
+    priorityClassName: ""
     podDisruptionBudget: {}
+    serviceAccount: {}
   matching:
     enabled: true
     service:
@@ -389,6 +464,7 @@ server:
       membershipPort: 6935
       membershipAppProtocol: tcp
     readinessProbe: {}
+    livenessProbe: {}
     metrics:
       annotations:
         enabled: true
@@ -409,7 +485,11 @@ server:
     additionalEnv: []
     containerSecurityContext: {}
     topologySpreadConstraints: []
+    schedulerName: ""
+    runtimeClassName: ""
+    priorityClassName: ""
     podDisruptionBudget: {}
+    serviceAccount: {}
   worker:
     enabled: true
     service:
@@ -419,6 +499,7 @@ server:
       membershipPort: 6939
       membershipAppProtocol: tcp
     readinessProbe: {}
+    livenessProbe: {}
     metrics:
       annotations:
         enabled: true
@@ -439,12 +520,24 @@ server:
     additionalEnv: []
     containerSecurityContext: {}
     topologySpreadConstraints: []
+    schedulerName: ""
+    runtimeClassName: ""
+    priorityClassName: ""
     podDisruptionBudget: {}
+    serviceAccount: {}
 admintools:
   enabled: true
+  # By default the admin tools connect to the internal-frontend when it is
+  # enabled, which grants admin access without an external Authorizer. Set this
+  # to true to connect through the external frontend instead (e.g. when the
+  # frontend has an Authorizer and you supply credentials via additionalEnv). If
+  # server TLS is enabled the chart mounts the matching certificate (internode
+  # for the internal-frontend, frontend for the external frontend) and sets the
+  # TEMPORAL_TLS_* env; this is skipped when a custom temporalAddress is set.
+  useExternalFrontend: false
   image:
     repository: temporalio/admin-tools
-    tag: "1.31.0"
+    tag: "1.32.0"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -458,11 +551,15 @@ admintools:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  schedulerName: ""
+  runtimeClassName: ""
+  priorityClassName: ""
   additionalVolumes: []
   additionalVolumeMounts: []
   additionalEnv: []
   additionalEnvSecretName: ""
   additionalEnvConfigMapName: ""
+  # temporalAddress: "localhost:7233"
   # for sidecar containers, add containers here with restartPolicy: Always
   additionalInitContainers: []
   resources: {}
@@ -470,13 +567,14 @@ admintools:
   securityContext: {}
   minReadySeconds: 0
   podDisruptionBudget: {}
+  serviceAccount: {}
 web:
   # additionalInitContainers: []
   enabled: true
-  replicaCount: 1
+  # replicaCount: 1
   image:
     repository: temporalio/ui
-    tag: 2.49.1
+    tag: 2.54.1
     pullPolicy: IfNotPresent
   service:
     # set type to NodePort if access to web needs access from outside the cluster
@@ -489,6 +587,10 @@ web:
     appProtocol: http
     annotations: {}
     # loadBalancerIP:
+  # Override the address the UI uses to connect to the Temporal frontend.
+  # Defaults to <fullname>-frontend.<namespace>.svc:<server.frontend.service.port>.
+  # Useful when running a proxy sidecar that intercepts gRPC traffic.
+  # temporalAddress: "localhost:7233"
   readinessProbe:
     initialDelaySeconds: 10
     httpGet:
@@ -530,6 +632,20 @@ web:
   affinity: {}
   additionalVolumes: []
   additionalVolumeMounts: []
+  # Wire TLS for the connection from the Web UI to the frontend. Point at an
+  # existing kubernetes.io/tls secret; the chart mounts it and sets the
+  # TEMPORAL_TLS_* environment variables. The secret needs ca.crt to verify the
+  # frontend, plus tls.crt + tls.key when the frontend requires client
+  # certificates (server.tls.frontend.requireClientAuth: true).
+  tls:
+    enabled: false
+    secretName: ""
+    mountPath: /etc/temporal/tls
+    # DNS name expected in the frontend server certificate. Required when
+    # enableHostVerification is true.
+    serverName: ""
+    # Verify the frontend certificate against serverName.
+    enableHostVerification: false
   # Adjust Web UI config with environment variables:
   # https://docs.temporal.io/references/web-ui-environment-variables
   additionalEnv: []
@@ -538,8 +654,12 @@ web:
   containerSecurityContext: {}
   securityContext: {}
   topologySpreadConstraints: []
+  schedulerName: ""
+  runtimeClassName: ""
+  priorityClassName: ""
   minReadySeconds: 0
   podDisruptionBudget: {}
+  serviceAccount: {}
 schema:
   # Use Helm hooks to ensure schema setup completes before server pods start.
   # Set to false if using Flux, Rancher or Terraform.
@@ -553,11 +673,12 @@ schema:
   resources: {}
   containerSecurityContext: {}
   securityContext: {}
+  serviceAccount: {}
 shims:
-  # Enable compatibility with Temporal 1.29 images. Set to false if using Temporal 1.30 or higher.
-  dockerize: true
-  # Enable compatibility with Temporal 1.29 images. Set to false if using Temporal 1.30 or higher.
-  elasticsearchTool: true
+  # Enable compatibility with Temporal 1.29 images. Set to true if using Temporal 1.29.
+  dockerize: false
+  # Enable compatibility with Temporal 1.29 images. Set to true if using Temporal 1.29.
+  elasticsearchTool: false
 test:
   podAnnotations: {}
   podLabels: {}
@@ -565,3 +686,4 @@ test:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  serviceAccount: {}

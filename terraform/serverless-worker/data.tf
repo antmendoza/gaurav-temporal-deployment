@@ -1,6 +1,8 @@
 data "terraform_remote_state" "cluster" {
-  backend = "local"
+  backend = "s3"
   config = {
-    path = "${path.module}/../cluster/terraform.tfstate"
+    bucket = var.state_bucket
+    key    = "cluster.tfstate"
+    region = var.region
   }
 }

@@ -4,7 +4,7 @@ data "aws_caller_identity" "current" {}
 # running kubectl/helm/terraform, so cluster auth survives SSO permission-set
 # rotation.
 resource "aws_iam_role" "eks_admin" {
-  name = "${var.cluster_name}-eks-admin"
+  name = "${local.name}-eks-admin"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

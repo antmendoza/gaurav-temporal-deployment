@@ -1,0 +1,293 @@
+# Prometheus + Grafana with a replication-lag dashboard, deployed in the same Helm release as
+# Temporal through the chart's extraObjects. Layer it after the cluster overlay:
+#   EXTRA_VALUES=global-namespace/aws-values.yaml,global-namespace/monitoring-values.yaml ./helm/deploy.sh
+#
+# Prometheus scrapes the server pods through the prometheus.io/* annotations the chart already
+# sets (port 9090). Grafana is ClusterIP only; reach it with a port-forward.
+#
+# extraObjects entries go through `tpl`, so Grafana legend placeholders are written as
+# {{ "{{label}}" }} to come out as {{label}}.
+
+extraObjects:
+  - |
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: prometheus
+      namespace: {{ .Release.Namespace }}
+  - |
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: prometheus
+      namespace: {{ .Release.Namespace }}
+    rules:
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["get", "list", "watch"]
+  - |
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: prometheus
+      namespace: {{ .Release.Namespace }}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: prometheus
+    subjects:
+      - kind: ServiceAccount
+        name: prometheus
+        namespace: {{ .Release.Namespace }}
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: prometheus-config
+      namespace: {{ .Release.Namespace }}
+    data:
+      prometheus.yml: |
+        global:
+          scrape_interval: 15s
+        scrape_configs:
+          - job_name: temporal
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names: [{{ .Release.Namespace }}]
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                regex: "true"
+                action: keep
+              - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                regex: (.+);(.+)
+                replacement: $1:$2
+                target_label: __address__
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_job]
+                target_label: job
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+  - |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: prometheus
+      namespace: {{ .Release.Namespace }}
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: prometheus
+      template:
+        metadata:
+          labels:
+            app: prometheus
+        spec:
+          serviceAccountName: prometheus
+          containers:
+            - name: prometheus
+              image: prom/prometheus:v3.1.0
+              args:
+                - --config.file=/etc/prometheus/prometheus.yml
+                - --storage.tsdb.retention.time=2d
+              ports:
+                - containerPort: 9090
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 512Mi
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/prometheus
+          volumes:
+            - name: config
+              configMap:
+                name: prometheus-config
+  - |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: prometheus
+      namespace: {{ .Release.Namespace }}
+    spec:
+      selector:
+        app: prometheus
+      ports:
+        - port: 9090
+          targetPort: 9090
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: grafana-provisioning
+      namespace: {{ .Release.Namespace }}
+    data:
+      datasources.yaml: |
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            uid: prometheus
+            type: prometheus
+            url: http://prometheus.{{ .Release.Namespace }}.svc:9090
+            isDefault: true
+      dashboards.yaml: |
+        apiVersion: 1
+        providers:
+          - name: temporal
+            folder: Temporal
+            type: file
+            options:
+              path: /var/lib/grafana/dashboards
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: grafana-dashboards
+      namespace: {{ .Release.Namespace }}
+    data:
+      replication.json: |
+        {
+          "uid": "temporal-replication",
+          "title": "Temporal replication",
+          "description": "Metrics from this cluster's history service. Latency and backlog panels show the replication stream coming into this cluster from the other one. from_cluster / to_cluster are cluster IDs (initialFailoverVersion): 1 = aws, 2 = gcp.",
+          "schemaVersion": 39,
+          "refresh": "30s",
+          "time": { "from": "now-1h", "to": "now" },
+          "panels": [
+            {
+              "type": "timeseries",
+              "title": "Replication lag p95 / p99 (created at source → applied here)",
+              "description": "replication_latency: time from the task's creation on the source cluster until this cluster applied it. This is the lag a failover would lose.",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 9 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "s",
+                  "thresholds": { "mode": "absolute", "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "orange", "value": 5 },
+                    { "color": "red", "value": 30 }
+                  ] },
+                  "custom": { "thresholdsStyle": { "mode": "line" } }
+                },
+                "overrides": []
+              },
+              "targets": [
+                { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, source_cluster) (rate(replication_latency_bucket[1m])))", "legendFormat": "p95 from {{ "{{source_cluster}}" }}" },
+                { "refId": "B", "expr": "histogram_quantile(0.99, sum by (le, source_cluster) (rate(replication_latency_bucket[1m])))", "legendFormat": "p99 from {{ "{{source_cluster}}" }}" }
+              ]
+            },
+            {
+              "type": "timeseries",
+              "title": "Transmission latency p95 (created at source → received here)",
+              "description": "replication_task_transmission_latency: the network and stream part of the lag. If this is close to the total lag, the bottleneck is between the clusters, not applying tasks.",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 9 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, source_cluster) (rate(replication_task_transmission_latency_bucket[1m])))", "legendFormat": "from {{ "{{source_cluster}}" }}" }
+              ]
+            },
+            {
+              "type": "timeseries",
+              "title": "Tasks applied / s",
+              "description": "Rate of replication tasks applied on this cluster, by source cluster.",
+              "gridPos": { "x": 0, "y": 9, "w": 8, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "sum by (source_cluster) (rate(replication_latency_count[1m]))", "legendFormat": "from {{ "{{source_cluster}}" }}" }
+              ]
+            },
+            {
+              "type": "timeseries",
+              "title": "Stream backlog p95 (tasks)",
+              "description": "replication_tasks_recv_backlog: tasks waiting in the replication stream, by direction. Sustained growth means the receiver can't keep up.",
+              "gridPos": { "x": 8, "y": 9, "w": 8, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, from_cluster, to_cluster) (rate(replication_tasks_recv_backlog_bucket[5m])))", "legendFormat": "{{ "{{from_cluster}}" }} → {{ "{{to_cluster}}" }}" }
+              ]
+            },
+            {
+              "type": "timeseries",
+              "title": "Failed tasks / stream errors",
+              "description": "replication_tasks_failed (tasks this cluster couldn't apply, by namespace) and replication_stream_error (stream reconnects, e.g. the other frontend is unreachable). Both should be zero.",
+              "gridPos": { "x": 16, "y": 9, "w": 8, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "sum by (namespace) (rate(replication_tasks_failed[5m]))", "legendFormat": "failed {{ "{{namespace}}" }}" },
+                { "refId": "B", "expr": "sum by (from_cluster, to_cluster) (rate(replication_stream_error[5m]))", "legendFormat": "stream error {{ "{{from_cluster}}" }} → {{ "{{to_cluster}}" }}" }
+              ]
+            }
+          ]
+        }
+  - |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: grafana
+      namespace: {{ .Release.Namespace }}
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: grafana
+      template:
+        metadata:
+          labels:
+            app: grafana
+        spec:
+          containers:
+            - name: grafana
+              image: grafana/grafana:11.4.0
+              env:
+                # ClusterIP + port-forward only, so no login.
+                - name: GF_AUTH_ANONYMOUS_ENABLED
+                  value: "true"
+                - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+                  value: Admin
+                - name: GF_AUTH_DISABLE_LOGIN_FORM
+                  value: "true"
+                - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+                  value: /var/lib/grafana/dashboards/replication.json
+              ports:
+                - containerPort: 3000
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 256Mi
+              volumeMounts:
+                - name: provisioning
+                  mountPath: /etc/grafana/provisioning/datasources/datasources.yaml
+                  subPath: datasources.yaml
+                - name: provisioning
+                  mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+                  subPath: dashboards.yaml
+                - name: dashboards
+                  mountPath: /var/lib/grafana/dashboards
+          volumes:
+            - name: provisioning
+              configMap:
+                name: grafana-provisioning
+            - name: dashboards
+              configMap:
+                name: grafana-dashboards
+  - |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: grafana
+      namespace: {{ .Release.Namespace }}
+    spec:
+      selector:
+        app: grafana
+      ports:
+        - port: 3000
+          targetPort: 3000

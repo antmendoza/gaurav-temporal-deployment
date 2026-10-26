@@ -1,6 +1,6 @@
 # Execution role for the Lambda itself (logs only).
 resource "aws_iam_role" "lambda_exec" {
-  name = "${var.function_name}-exec"
+  name = "${local.name}-exec"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -29,7 +29,7 @@ locals {
 # Role assumed to invoke this Lambda. ExternalId guards against the confused
 # deputy problem — the caller must present the matching ID.
 resource "aws_iam_role" "temporal_worker" {
-  name = "${var.function_name}-temporal"
+  name = "${local.name}-temporal"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

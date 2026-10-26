@@ -4,12 +4,12 @@ resource "random_password" "db" {
 }
 
 resource "aws_db_subnet_group" "temporal" {
-  name       = "${var.cluster_name}-db"
+  name       = "${local.name}-db"
   subnet_ids = module.vpc.private_subnets
 }
 
 resource "aws_security_group" "db" {
-  name   = "${var.cluster_name}-db"
+  name   = "${local.name}-db"
   vpc_id = module.vpc.vpc_id
 }
 
@@ -22,7 +22,7 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_nodes" {
 }
 
 resource "aws_db_instance" "temporal" {
-  identifier     = "${var.cluster_name}-db"
+  identifier     = "${local.name}-db"
   engine         = "postgres"
   engine_version = "16"
   instance_class = "db.t4g.micro"

@@ -1,0 +1,29 @@
+server:
+  frontend:
+    service:
+      annotations:
+        # base allowlist + AWS NAT gateway egress, for replication
+        service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32,104.28.191.43/32,104.28.25.150/32,<AWS_NAT_EIP>/32"
+  config:
+    clusterMetadata:
+      enableGlobalNamespace: true
+      failoverVersionIncrement: 10
+      masterClusterName: aws
+      currentClusterName: gcp
+      clusterInformation:
+        gcp:
+          enabled: true
+          initialFailoverVersion: 2
+          rpcName: frontend
+          rpcAddress: "127.0.0.1:7233"
+          httpAddress: "127.0.0.1:7243"
+        # Satisfies the startup check that the master cluster is listed. The record
+        # written by `cluster upsert` replaces it; that is where the real address goes.
+        aws:
+          enabled: false
+          initialFailoverVersion: 1
+          rpcName: frontend
+          rpcAddress: "aws-placeholder:7233"
+    dcRedirectionPolicy:
+      policy: selected-apis-forwarding
+      toDC: ""
