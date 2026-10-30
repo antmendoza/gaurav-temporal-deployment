@@ -1,16 +1,22 @@
 package io.temporal.demo.failover;
 
 import io.temporal.workflow.QueryMethod;
+import io.temporal.workflow.UpdateMethod;
 import io.temporal.workflow.WorkflowInterface;
 import io.temporal.workflow.WorkflowMethod;
-import java.util.List;
 
 @WorkflowInterface
-public interface FailoverWorkflow {
+public interface PresentationWorkflow {
 
   @WorkflowMethod
-  List<String> run(int steps);
+  void run();
+
+  @UpdateMethod
+  Slide next();
+
+  @UpdateMethod
+  Slide previous();
 
   @QueryMethod
-  List<String> progress();
+  Slide current();
 }

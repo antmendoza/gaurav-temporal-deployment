@@ -3,7 +3,7 @@ package io.temporal.demo.failover;
 import io.temporal.activity.ActivityInterface;
 
 @ActivityInterface
-public interface StepActivities {
+public interface SlideActivities {
 
-  String recordStep(int step);
+  String whereAmI();
 }

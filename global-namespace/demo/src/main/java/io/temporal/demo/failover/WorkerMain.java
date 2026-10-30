@@ -26,9 +26,9 @@ public class WorkerMain {
 
     WorkerFactory factory = WorkerFactory.newInstance(client);
     Worker worker = factory.newWorker(taskQueue);
-    worker.registerWorkflowImplementationTypes(FailoverWorkflowImpl.class);
+    worker.registerWorkflowImplementationTypes(PresentationWorkflowImpl.class);
     worker.registerActivitiesImplementations(
-        new StepActivitiesImpl(cloud, InetAddress.getLocalHost().getHostName()));
+        new SlideActivitiesImpl(cloud, InetAddress.getLocalHost().getHostName()));
     factory.start();
 
     System.out.printf(
