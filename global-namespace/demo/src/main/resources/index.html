@@ -6,16 +6,29 @@
   <title>Durable Deck</title>
   <style>
     body { margin: 0; height: 100vh; display: flex; flex-direction: column; font-family: system-ui, sans-serif; background: #0b0b14; color: #f2f2f7; }
-    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 8vw; text-align: center; }
-    #text { font-size: clamp(28px, 5vw, 64px); line-height: 1.2; }
+    main { flex: 1; display: flex; min-height: 0; }
+    #slide { flex: 0 0 40%; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 0 4vw; text-align: center; }
+    #text { font-size: clamp(24px, 3.5vw, 56px); line-height: 1.2; }
+    #divider { flex: 0 0 6px; cursor: col-resize; background: #44445a; touch-action: none; }
+    iframe { flex: 1; min-width: 0; border: 0; background: #fff; }
+    /* The iframe would swallow the pointer while dragging across it. */
+    body.dragging iframe { pointer-events: none; }
+    body.dragging { cursor: col-resize; user-select: none; }
+    body.slide-only #slide { flex: 1; }
+    body.slide-only iframe, body.slide-only #divider { display: none; }
     footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; color: #9a9ab0; font-size: 14px; }
     button { font: inherit; font-size: 16px; padding: 10px 22px; border-radius: 8px; border: 1px solid #44445a; background: #1c1c2b; color: inherit; cursor: pointer; }
     button:disabled { opacity: .4; cursor: wait; }
+    footer > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #error { color: #ff7a7a; }
   </style>
 </head>
 <body>
-  <main><div id="text">Start the workflow to begin.</div></main>
+  <main>
+    <div id="slide"><div id="text">Start the workflow to begin.</div></div>
+    <div id="divider"></div>
+    <iframe id="temporal" src="/temporal/namespaces/replicated/workflows/presentation"></iframe>
+  </main>
   <footer>
     <button id="prev">&larr; Previous</button>
     <span><span id="pos"></span> <span id="served"></span> <span id="error"></span></span>
@@ -23,6 +36,8 @@
   </footer>
   <script>
     const buttons = document.querySelectorAll("button");
+    const iframe = document.getElementById("temporal");
+    let started = false;
 
     async function call(path, method) {
       buttons.forEach(b => b.disabled = true);
@@ -34,18 +49,39 @@
         document.getElementById("pos").textContent = `${body.number} / ${body.total}`;
         document.getElementById("served").textContent = `· served by ${body.servedBy}`;
         document.getElementById("error").textContent = "";
+        if (!started) {
+          started = true;
+          iframe.src = iframe.src;
+        }
       } catch (e) {
         document.getElementById("error").textContent = e.message;
+        document.getElementById("error").title = e.message;
+        // Before the workflow is started on stage, keep checking so slide 1 appears by itself.
+        if (!started) setTimeout(() => call("/api/current", "GET"), 2000);
       } finally {
         buttons.forEach(b => b.disabled = false);
       }
     }
+
+    const slide = document.getElementById("slide");
+    const divider = document.getElementById("divider");
+    divider.addEventListener("pointerdown", e => {
+      divider.setPointerCapture(e.pointerId);
+      document.body.classList.add("dragging");
+    });
+    divider.addEventListener("pointermove", e => {
+      if (!divider.hasPointerCapture(e.pointerId)) return;
+      const percent = Math.min(85, Math.max(15, e.clientX / window.innerWidth * 100));
+      slide.style.flexBasis = `${percent}%`;
+    });
+    divider.addEventListener("pointerup", () => document.body.classList.remove("dragging"));
 
     document.getElementById("next").onclick = () => call("/api/next", "POST");
     document.getElementById("prev").onclick = () => call("/api/previous", "POST");
     document.addEventListener("keydown", e => {
       if (e.key === "ArrowRight" || e.key === " ") call("/api/next", "POST");
       if (e.key === "ArrowLeft") call("/api/previous", "POST");
+      if (e.key === "u") document.body.classList.toggle("slide-only");
     });
     call("/api/current", "GET");
   </script>

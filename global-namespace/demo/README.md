@@ -19,14 +19,19 @@ PresentationWorkflow.run()          started live on stage, waits until terminate
 | `src/…/Slides.java` | The deck text (edit the slides here) |
 | `src/…/SlideActivities*.java` | Activity that reports `CLOUD` and hostname |
 | `src/…/WorkerMain.java` | Worker; configured by env vars (below) |
-| `src/…/UiMain.java`, `src/main/resources/index.html` | Browser UI: Previous / Next buttons (arrow keys work too) |
+| `src/…/UiMain.java`, `src/main/resources/index.html` | Browser UI: the slide, Previous / Next buttons (arrow keys work too), and the Temporal UI for the workflow in an iframe (`u` hides it) |
 | `Dockerfile` | Multi-stage Maven build → JRE 21 image |
 | `k8s/worker.yaml` | Deployment in the `temporal` namespace, pointed at the local frontend |
 | `deploy-worker.sh` | Builds, pushes to ECR or Artifact Registry, applies the Deployment |
 
 Worker env vars: `TEMPORAL_ADDRESS` (default `localhost:7233`), `TEMPORAL_NAMESPACE`
 (`replicated`), `TASK_QUEUE` (`replicated-demo`), `CLOUD` (`local`). The UI also reads
-`WORKFLOW_ID` (`presentation`) and `PORT` (`8080`).
+`WORKFLOW_ID` (`presentation`), `PORT` (`8080`) and `TEMPORAL_UI` (`http://localhost:8233`).
+
+The Temporal UI sends `X-Frame-Options: SAMEORIGIN`, so the deck can't iframe it from another
+port. `UiMain` proxies `/temporal/*` to `TEMPORAL_UI`, which puts both on one origin. For that to
+work, the Temporal UI must be served under `/temporal` (`--ui-public-path /temporal` for
+`start-dev`). The iframe shows the workflow page and updates live as the clicks land.
 
 ## Prerequisites
 
@@ -75,7 +80,11 @@ java -cp target/failover-worker.jar io.temporal.demo.failover.UiMain
 open http://localhost:8080
 ```
 
-Until the workflow exists, the footer shows `workflow not found`.
+Until the workflow exists, the footer shows `workflow not found`. The page keeps checking, so
+slide 1 appears by itself when the workflow starts.
+
+The iframe needs the cluster's Temporal UI under `/temporal`, reached through `TEMPORAL_UI`.
+The Helm values here don't set a public path yet.
 
 ## 3. Start the workflow on stage (namespace active on AWS)
 
@@ -84,8 +93,8 @@ temporal workflow start --address localhost:7233 --namespace replicated \
   --task-queue replicated-demo --type PresentationWorkflow --workflow-id presentation
 ```
 
-Reload the page: slide 1 appears, served by `aws`. Each Next/Previous click is one Workflow
-Update.
+Slide 1 appears, served by `aws`, and the iframe switches to the new run. Each Next/Previous
+click is one Workflow Update.
 
 ## 4. Fail over to GCP
 
@@ -109,22 +118,48 @@ Things to try:
 - **Unplanned failover.** Fail over while the active side is unreachable. Clicks that hadn't
   replicated yet are lost, and the deck may step back a slide on the new side.
 
-## Run locally
 
-```sh
-cd global-namespace/demo
-mvn package
-temporal server start-dev --namespace replicated &
-CLOUD=local java -jar target/failover-worker.jar &
-java -cp target/failover-worker.jar io.temporal.demo.failover.UiMain &
-temporal workflow start --namespace replicated --task-queue replicated-demo \
-  --type PresentationWorkflow --workflow-id presentation
-open http://localhost:8080
-```
 
 ## Clean up
 
 ```sh
 temporal workflow terminate --namespace replicated --workflow-id presentation
 kubectl -n temporal delete deployment failover-worker   # in each cluster
+```
+
+
+## Run locally
+
+
+### Build 
+```sh
+cd global-namespace/demo
+mvn package
+
+```
+
+### Run the Temporal Server
+```sh
+temporal server start-dev --namespace replicated --ui-public-path /temporal
+```
+
+### (new terminal) Run the worker
+```sh
+CLOUD=local java -jar target/failover-worker.jar 
+```
+
+
+
+### (new Terminal) Start the workflow with the presentation
+```sh
+temporal workflow start --namespace replicated --task-queue replicated-demo \
+  --type PresentationWorkflow --workflow-id presentation
+```
+
+
+### (new Terminal) Start the UI / start the presentation
+```sh
+java -cp target/failover-worker.jar io.temporal.demo.failover.UiMain
+
+open http://localhost:8080
 ```
