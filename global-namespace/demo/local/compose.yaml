@@ -1,0 +1,74 @@
+# Two replicated Temporal clusters named aws and gcp, the Temporal UI, a worker per cluster and the
+# deck. See "Two replicated clusters, with failover" in ../README.md.
+name: failover-demo
+
+x-server: &server
+  image: temporalio/server:1.32.0
+  environment:
+    BIND_ON_IP: 0.0.0.0
+    TEMPORAL_SERVER_CONFIG_FILE_PATH: /etc/temporal/cluster.yaml
+    TEMPORAL_ALLOW_NO_AUTH: "true"
+
+x-worker: &worker
+  # Built once by worker-aws; the other two reuse the image.
+  image: failover-worker:local
+  depends_on:
+    setup:
+      condition: service_completed_successfully
+
+services:
+  aws:
+    <<: *server
+    volumes:
+      - ./cluster-aws.yaml:/etc/temporal/cluster.yaml:ro
+    ports:
+      - "7233:7233"
+
+  gcp:
+    <<: *server
+    volumes:
+      - ./cluster-gcp.yaml:/etc/temporal/cluster.yaml:ro
+    ports:
+      - "9233:7233"
+
+  setup:
+    image: temporalio/admin-tools:1.32.0
+    depends_on: [aws, gcp]
+    volumes:
+      - ./setup.sh:/setup.sh:ro
+    entrypoint: ["sh", "/setup.sh"]
+
+  ui:
+    image: temporalio/ui:2.54.1
+    depends_on: [aws]
+    environment:
+      TEMPORAL_ADDRESS: aws:7233
+      TEMPORAL_UI_PORT: "8080"
+      TEMPORAL_UI_PUBLIC_PATH: /temporal
+      TEMPORAL_DEFAULT_NAMESPACE: replicated
+    ports:
+      - "8233:8080"
+
+  worker-aws:
+    <<: *worker
+    build: ..
+    hostname: worker-aws
+    environment:
+      TEMPORAL_ADDRESS: aws:7233
+      CLOUD: aws
+
+  worker-gcp:
+    <<: *worker
+    hostname: worker-gcp
+    environment:
+      TEMPORAL_ADDRESS: gcp:7233
+      CLOUD: gcp
+
+  deck:
+    <<: *worker
+    entrypoint: ["java", "-cp", "/app/worker.jar", "io.temporal.demo.failover.UiMain"]
+    environment:
+      TEMPORAL_CLUSTERS: aws=aws:7233,gcp=gcp:7233
+      TEMPORAL_UI: http://ui:8080
+    ports:
+      - "8080:8080"

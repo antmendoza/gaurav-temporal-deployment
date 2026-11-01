@@ -130,6 +130,107 @@ kubectl -n temporal delete deployment failover-worker   # in each cluster
 
 ## Run locally
 
+### One cluster
+
+```sh
+cd global-namespace/demo
+mvn package
+temporal server start-dev --namespace replicated --ui-public-path /temporal &
+CLOUD=local java -jar target/failover-worker.jar &
+java -cp target/failover-worker.jar io.temporal.demo.failover.UiMain &
+temporal workflow start --namespace replicated --task-queue replicated-demo \
+  --type PresentationWorkflow --workflow-id presentation
+open http://localhost:8080
+```
+
+### Two replicated clusters, with failover
+
+`local/compose.yaml` runs two Temporal 1.32.0 clusters named `aws` (frontend `:7233`) and `gcp`
+(frontend `:9233`), with the same replication settings as the real ones. It also runs the Temporal
+UI (`:8233`), a worker per cluster and the deck (`:8080`). A one-shot `setup` container joins the
+clusters and creates the `replicated` namespace. 
+State is in memory, so every `up` starts clean.
+
+
+Run the demo with two clusters and wait for the containers to start:
+
+```sh
+cd local
+
+docker compose up -d --build     # setup takes about a minute; workers and deck start after it
+
+docker compose logs -f $(docker compose config --services | grep -vx ui) # watch the logs, except the UI
+```
+[compose.yaml](local/compose.yaml) invokes [setup.sh](local/setup.sh), which creates the `replicated` namespace 
+and set aws as active
+
+Verify: 
+```sh
+temporal operator namespace describe --address 127.0.0.1:7233 --namespace replicated   # aws
+
+temporal operator namespace describe --address 127.0.0.1:9233 --namespace replicated   # gcp
+```
+![img.png](local/img.png)
+
+
+
+Start the presentation workflow:
+```sh
+temporal workflow start --address 127.0.0.1:7233 --namespace replicated \
+  --task-queue replicated-demo --type PresentationWorkflow --workflow-id presentation \
+  --task-timeout 1s
+```
+
+Open the presentation UI:
+```sh
+open http://localhost:8080
+```
+![img.jpg](local/img.jpg)
+
+
+
+Failover to GCP:
+```sh
+cd local
+./failover.sh gcp                # next click is served by gcp
+```
+
+Verify:
+```sh
+temporal operator namespace describe --address 127.0.0.1:9233 --namespace replicated 
+```
+
+Next slide is served by gcp.
+
+
+
+
+
+
+
+```sh
+./failover.sh aws                # and back
+./failover.sh                    # which cluster each side thinks is active
+docker compose stop worker-gcp   # kill a worker; start it again to resume
+docker compose down
+```
+
+The deck gets both frontends (`TEMPORAL_CLUSTERS=aws=aws:7233,gcp=gcp:7233`) and sends each click to
+the active cluster. Server 1.32 doesn't forward Workflow Updates from the standby cluster, so
+`selected-apis-forwarding` alone isn't enough.
+
+The first click after failover takes 10–40 s. Clicks after that are instant.
+
+## Clean up
+
+```sh
+temporal workflow terminate --namespace replicated --workflow-id presentation
+kubectl -n temporal delete deployment failover-worker   # in each cluster
+```
+
+
+## Run locally
+
 
 ### Build 
 ```sh

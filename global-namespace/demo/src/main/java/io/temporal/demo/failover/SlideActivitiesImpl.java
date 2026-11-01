@@ -18,7 +18,7 @@ public class SlideActivitiesImpl implements SlideActivities {
   @Override
   public String whereAmI() {
     String servedBy = String.format("%s (%s)", cloud, host);
-    log.info("slide served by {}", servedBy);
+    log.info("Slide served by {}", servedBy);
     return servedBy;
   }
 }

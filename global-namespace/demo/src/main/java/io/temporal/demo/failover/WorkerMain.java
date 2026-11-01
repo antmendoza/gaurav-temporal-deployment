@@ -6,38 +6,44 @@ import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
+import io.temporal.worker.WorkerOptions;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.time.Duration;
 
 public class WorkerMain {
 
-  public static void main(String[] args) throws UnknownHostException {
-    String address = env("TEMPORAL_ADDRESS", "localhost:7233");
-    String namespace = env("TEMPORAL_NAMESPACE", "replicated");
-    String taskQueue = env("TASK_QUEUE", "replicated-demo");
-    String cloud = env("CLOUD", "local");
 
-    WorkflowServiceStubs service =
-        WorkflowServiceStubs.newServiceStubs(
-            WorkflowServiceStubsOptions.newBuilder().setTarget(address).build());
-    WorkflowClient client =
-        WorkflowClient.newInstance(
-            service, WorkflowClientOptions.newBuilder().setNamespace(namespace).build());
+    public static void main(String[] args) throws UnknownHostException {
+        String address = env("TEMPORAL_ADDRESS", "localhost:7233");
+        String namespace = env("TEMPORAL_NAMESPACE", "replicated");
+        String taskQueue = env("TASK_QUEUE", "replicated-demo");
+        String cloud = env("CLOUD", "local");
 
-    WorkerFactory factory = WorkerFactory.newInstance(client);
-    Worker worker = factory.newWorker(taskQueue);
-    worker.registerWorkflowImplementationTypes(PresentationWorkflowImpl.class);
-    worker.registerActivitiesImplementations(
-        new SlideActivitiesImpl(cloud, InetAddress.getLocalHost().getHostName()));
-    factory.start();
+        WorkflowServiceStubs service =
+                WorkflowServiceStubs.newServiceStubs(
+                        WorkflowServiceStubsOptions.newBuilder().setTarget(address).build());
+        WorkflowClient client =
+                WorkflowClient.newInstance(
+                        service, WorkflowClientOptions.newBuilder().setNamespace(namespace).build());
 
-    System.out.printf(
-        "worker started: cloud=%s address=%s namespace=%s taskQueue=%s%n",
-        cloud, address, namespace, taskQueue);
-  }
+        WorkerFactory factory = WorkerFactory.newInstance(client);
+        Worker worker = factory.newWorker(taskQueue,
+                WorkerOptions.newBuilder().setStickyQueueScheduleToStartTimeout(Duration.ofSeconds(1))
+                        .build());
+        worker.registerWorkflowImplementationTypes(PresentationWorkflowImpl.class);
+        worker.registerActivitiesImplementations(
+                new SlideActivitiesImpl(cloud, InetAddress.getLocalHost().getHostName()));
+        factory.start();
 
-  private static String env(String name, String fallback) {
-    String value = System.getenv(name);
-    return value == null || value.isBlank() ? fallback : value;
-  }
+        System.out.printf(
+                "worker started: cloud=%s address=%s namespace=%s taskQueue=%s%n",
+                cloud, address, namespace, taskQueue);
+    }
+
+    private static String env(String name, String fallback) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? fallback : value;
+    }
 }
