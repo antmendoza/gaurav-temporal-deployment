@@ -1,5 +1,13 @@
 # Local failover: two replicated clusters
 
+
+This is a demo is a local failover setup, where the presentation is served by a workflow running on
+a replicated cluster. Failing over to the passive cluster shows how the workflow continues running and serves
+the next slide from the new active cluster.
+
+
+## Setup
+
 `compose.yaml` runs two Temporal 1.32.0 clusters named `aws` (frontend `:7233`) and `gcp`
 (frontend `:9233`), with the same replication settings as the real ones. It also runs the Temporal
 UI (`:8233`), a worker per cluster and the deck (`:8080`). A one-shot `setup` container joins the
@@ -8,6 +16,8 @@ State is in memory, so every `up` starts clean.
 
 
 Run everything from this folder. 
+
+## Run
 
 Start the clusters and wait for the containers to start:
 
