@@ -2,7 +2,9 @@ package io.temporal.demo.failover;
 
 import io.grpc.StatusRuntimeException;
 import io.temporal.api.workflowservice.v1.DescribeNamespaceRequest;
+import io.temporal.api.replication.v1.NamespaceReplicationConfig;
 import io.temporal.api.workflowservice.v1.DescribeNamespaceResponse;
+import io.temporal.api.workflowservice.v1.UpdateNamespaceRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
@@ -10,6 +12,7 @@ import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -43,6 +46,34 @@ public class ActiveCluster {
 
 
     public WorkflowClient get() {
+        return clients.get(activeName());
+    }
+
+    public Set<String> names() {
+        return clients.keySet();
+    }
+
+    /**
+     * Makes {@code to} the active cluster, sending the change to {@code to} itself so it works even
+     * when the current active cluster is unreachable, like {@code temporal operator namespace update}.
+     */
+    public void failover(String to) {
+        WorkflowClient client = clients.get(to);
+        if (client == null) {
+            throw new IllegalArgumentException("unknown cluster " + to + "; known: " + clients.keySet());
+        }
+        client.getWorkflowServiceStubs()
+                .blockingStub()
+                .withDeadlineAfter(10, TimeUnit.SECONDS)
+                .updateNamespace(
+                        UpdateNamespaceRequest.newBuilder()
+                                .setNamespace(namespace)
+                                .setReplicationConfig(
+                                        NamespaceReplicationConfig.newBuilder().setActiveClusterName(to))
+                                .build());
+    }
+
+    public String activeName() {
         String active = null;
         long newest = -1;
         for (WorkflowClient client : clients.values()) {
@@ -64,10 +95,9 @@ public class ActiveCluster {
                 // An unreachable cluster can't be the one to talk to; ask the others.
             }
         }
-        WorkflowClient client = clients.get(active);
-        if (client == null) {
+        if (!clients.containsKey(active)) {
             throw new IllegalStateException("no reachable cluster in " + clients.keySet() + " is active");
         }
-        return client;
+        return active;
     }
 }

@@ -53,7 +53,10 @@ open http://localhost:8080
 
 ![Screenshot 2026-11-01 at 20.45.33.png](Screenshot%202026-11-01%20at%2020.45.33.png)
 
-Failover to GCP:
+The panel at the bottom streams the `worker-aws` and `worker-gcp` logs (the deck reads them from the
+Docker socket). Keys: `→`/space next, `←` previous, `u` hides the Temporal UI, `l` hides the logs.
+
+Failover to GCP, with the **Fail over to gcp** button next to Next, or:
 ```sh
 ./failover.sh gcp                # next click is served by gcp
 ```

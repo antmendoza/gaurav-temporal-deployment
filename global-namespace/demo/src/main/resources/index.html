@@ -21,6 +21,12 @@
     button:disabled { opacity: .4; cursor: wait; }
     footer > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #error { color: #ff7a7a; }
+    footer .right { display: flex; gap: 12px; }
+    #failover { border-color: #6b5b2a; }
+    #logs { flex: 0 0 22vh; overflow-y: auto; margin: 0; padding: 8px 24px; border-top: 1px solid #44445a; background: #07070d; font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+    #logs [data-cloud=aws] { color: #ffb347; }
+    #logs [data-cloud=gcp] { color: #7fb2ff; }
+    body.no-logs #logs, body.hide-logs #logs { display: none; }
   </style>
 </head>
 <body>
@@ -29,13 +35,17 @@
     <div id="divider"></div>
     <iframe id="temporal" src="/temporal/namespaces/replicated/workflows/presentation"></iframe>
   </main>
+  <pre id="logs"></pre>
   <footer>
     <button id="prev">&larr; Previous</button>
     <span><span id="pos"></span> <span id="served"></span> <span id="error"></span></span>
-    <button id="next">Next &rarr;</button>
+    <div class="right">
+      <button id="failover" hidden></button>
+      <button id="next">Next &rarr;</button>
+    </div>
   </footer>
   <script>
-    const buttons = document.querySelectorAll("button");
+    const buttons = document.querySelectorAll("#prev, #next");
     const iframe = document.getElementById("temporal");
     let started = false;
 
@@ -76,12 +86,63 @@
     });
     divider.addEventListener("pointerup", () => document.body.classList.remove("dragging"));
 
+    // Failover: the label names the cluster the next click would move to.
+    const failoverButton = document.getElementById("failover");
+    let failoverTarget = null;
+    async function refreshCluster() {
+      if (failoverButton.disabled) return;
+      try {
+        const res = await fetch("/api/cluster");
+        if (!res.ok) return;
+        const { active, clusters } = await res.json();
+        failoverTarget = clusters.find(c => c !== active);
+        failoverButton.textContent = `Fail over to ${failoverTarget}`;
+        failoverButton.title = `${active} is active`;
+        failoverButton.hidden = false;
+      } catch (e) {}
+    }
+    failoverButton.onclick = async () => {
+      failoverButton.disabled = true;
+      failoverButton.textContent = `Failing over to ${failoverTarget}…`;
+      try {
+        const res = await fetch(`/api/failover?to=${failoverTarget}`, { method: "POST" });
+        const body = await res.json();
+        document.getElementById("error").textContent = res.ok ? "" : body.error;
+      } finally {
+        failoverButton.disabled = false;
+        refreshCluster();
+      }
+    };
+    refreshCluster();
+    setInterval(refreshCluster, 3000);
+
+    // Worker logs, streamed from Docker by the deck; hidden when it can't reach Docker.
+    const logs = document.getElementById("logs");
+    const source = new EventSource("/api/logs");
+    source.onmessage = e => {
+      const { service, line } = JSON.parse(e.data);
+      const atBottom = logs.scrollTop + logs.clientHeight >= logs.scrollHeight - 4;
+      const row = document.createElement("div");
+      row.dataset.cloud = service.includes("gcp") ? "gcp" : "aws";
+      row.textContent = `${service.padEnd(11)} ${line}`;
+      logs.append(row);
+      while (logs.childElementCount > 300) logs.firstElementChild.remove();
+      if (atBottom) logs.scrollTop = logs.scrollHeight;
+    };
+    source.onerror = () => {
+      if (!logs.childElementCount) {
+        document.body.classList.add("no-logs");
+        source.close();
+      }
+    };
+
     document.getElementById("next").onclick = () => call("/api/next", "POST");
     document.getElementById("prev").onclick = () => call("/api/previous", "POST");
     document.addEventListener("keydown", e => {
       if (e.key === "ArrowRight" || e.key === " ") call("/api/next", "POST");
       if (e.key === "ArrowLeft") call("/api/previous", "POST");
       if (e.key === "u") document.body.classList.toggle("slide-only");
+      if (e.key === "l") document.body.classList.toggle("hide-logs");
     });
     call("/api/current", "GET");
   </script>

@@ -72,5 +72,10 @@ services:
     environment:
       TEMPORAL_CLUSTERS: aws=aws:7233,gcp=gcp:7233
       TEMPORAL_UI: http://ui:8080
+      # The log panel reads these services' containers from Docker, in this Compose project only.
+      WORKER_LOGS: worker-aws,worker-gcp
+      COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "8080:8080"
