@@ -1,0 +1,5 @@
+# Polls that reach a cluster while it's standby only serve queries, and stay that way until they
+# expire. After a failover, new tasks wait for those polls to run out; 5s instead of the 1m
+# default makes the first click after a failover take ~2s instead of up to a minute.
+matching.longPollExpirationInterval:
+  - value: 5s

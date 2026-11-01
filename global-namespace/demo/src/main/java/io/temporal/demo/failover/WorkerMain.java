@@ -23,14 +23,17 @@ public class WorkerMain {
 
         WorkflowServiceStubs service =
                 WorkflowServiceStubs.newServiceStubs(
-                        WorkflowServiceStubsOptions.newBuilder().setTarget(address).build());
+                        WorkflowServiceStubsOptions.newBuilder()
+//                                .setRpcLongPollTimeout(Duration.ofSeconds(11))
+                                .setTarget(address).build());
         WorkflowClient client =
                 WorkflowClient.newInstance(
                         service, WorkflowClientOptions.newBuilder().setNamespace(namespace).build());
 
         WorkerFactory factory = WorkerFactory.newInstance(client);
         Worker worker = factory.newWorker(taskQueue,
-                WorkerOptions.newBuilder().setStickyQueueScheduleToStartTimeout(Duration.ofSeconds(1))
+                WorkerOptions.newBuilder()
+                        .setStickyQueueScheduleToStartTimeout(Duration.ofSeconds(1))
                         .build());
         worker.registerWorkflowImplementationTypes(PresentationWorkflowImpl.class);
         worker.registerActivitiesImplementations(

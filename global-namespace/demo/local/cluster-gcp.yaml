@@ -86,3 +86,7 @@ clusterMetadata:
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
+
+dynamicConfigClient:
+  filepath: /etc/temporal/dynamicconfig.yaml
+  pollInterval: 10s

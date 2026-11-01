@@ -21,6 +21,7 @@ services:
     <<: *server
     volumes:
       - ./cluster-aws.yaml:/etc/temporal/cluster.yaml:ro
+      - ./dynamicconfig.yaml:/etc/temporal/dynamicconfig.yaml:ro
     ports:
       - "7233:7233"
 
@@ -28,6 +29,7 @@ services:
     <<: *server
     volumes:
       - ./cluster-gcp.yaml:/etc/temporal/cluster.yaml:ro
+      - ./dynamicconfig.yaml:/etc/temporal/dynamicconfig.yaml:ro
     ports:
       - "9233:7233"
 
