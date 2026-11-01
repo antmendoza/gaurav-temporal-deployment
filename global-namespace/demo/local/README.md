@@ -6,6 +6,11 @@ a replicated cluster. Failing over to the passive cluster shows how the workflow
 the next slide from the new active cluster.
 
 
+
+
+![Architecture — local failover demo.excalidraw.png](Architecture%20%E2%80%94%20local%20failover%20demo.excalidraw.png)
+
+
 ## Setup
 
 `compose.yaml` runs two Temporal 1.32.0 clusters named `aws` (frontend `:7233`) and `gcp`
