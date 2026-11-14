@@ -151,7 +151,7 @@ extraObjects:
         {
           "uid": "temporal-replication",
           "title": "Temporal replication",
-          "description": "Metrics from this cluster's history service. Latency and backlog panels show the replication stream coming into this cluster from the other one. from_cluster / to_cluster are cluster IDs (initialFailoverVersion): 1 = aws, 2 = gcp.",
+          "description": "Metrics from this cluster's history service (replication) and frontend (requests). Latency and backlog panels show the replication stream coming into this cluster from the other one. from_cluster / to_cluster are cluster IDs (initialFailoverVersion): 1 = aws, 2 = gcp.",
           "schemaVersion": 39,
           "refresh": "30s",
           "time": { "from": "now-1h", "to": "now" },
@@ -222,6 +222,39 @@ extraObjects:
               "targets": [
                 { "refId": "A", "expr": "sum by (namespace) (rate(replication_tasks_failed[5m]))", "legendFormat": "failed {{ "{{namespace}}" }}" },
                 { "refId": "B", "expr": "sum by (from_cluster, to_cluster) (rate(replication_stream_error[5m]))", "legendFormat": "stream error {{ "{{from_cluster}}" }} → {{ "{{to_cluster}}" }}" }
+              ]
+            },
+            {
+              "type": "timeseries",
+              "title": "Frontend requests / s",
+              "description": "service_requests on this cluster's frontend, by operation. Includes the replication stream from the other cluster (Admin* operations) and calls forwarded by selected-apis-forwarding.",
+              "gridPos": { "x": 0, "y": 17, "w": 8, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "sum by (operation) (rate(service_requests{service_name=\"frontend\"}[1m]))", "legendFormat": "{{ "{{operation}}" }}" }
+              ]
+            },
+            {
+              "type": "timeseries",
+              "title": "Frontend errors / s",
+              "description": "service_error_with_type on this cluster's frontend, by operation and error type. NamespaceNotActive here means a call reached the standby side without being forwarded.",
+              "gridPos": { "x": 8, "y": 17, "w": 8, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "sum by (operation, error_type) (rate(service_error_with_type{service_name=\"frontend\"}[1m]))", "legendFormat": "{{ "{{operation}}" }} {{ "{{error_type}}" }}" }
+              ]
+            },
+            {
+              "type": "timeseries",
+              "title": "Frontend latency p95",
+              "description": "service_latency on this cluster's frontend, by operation. Long polls and the replication streams are left out: they stay open by design and would swamp the scale.",
+              "gridPos": { "x": 16, "y": 17, "w": 8, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(service_latency_bucket{service_name=\"frontend\", operation!~\"Poll.*|AdminStreamWorkflowReplicationMessages|AdminGetNamespaceReplicationMessages\"}[1m])))", "legendFormat": "{{ "{{operation}}" }}" }
               ]
             }
           ]
