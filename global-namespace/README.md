@@ -215,7 +215,7 @@ kubectl -n temporal exec deploy/temporal-admintools -- \
 ## 8. Run the failover demo
 
 Java workers in both clouds, a long-running workflow, and a failover mid-run: see
-[`demo/README.md`](demo/README.md).
+[`demo/k8s/README.md`](demo/k8s/README.md).
 
 ## See the workflows in the UI
 
@@ -255,7 +255,7 @@ Open http://localhost:3000. Each Grafana shows **its own cluster's** history met
 | Stream backlog p95 | `replication_tasks_recv_backlog` | Sustained growth |
 | Failed tasks / stream errors | `replication_tasks_failed`, `replication_stream_error` | Anything above 0. Stream errors usually mean the other frontend is unreachable (allowlist, NAT IP) |
 
-The panels only have data once tasks replicate: run the [failover demo](demo/README.md) to
+The panels only have data once tasks replicate: run the [failover demo](demo/k8s/README.md) to
 generate some.
 
 ## Tear down

@@ -3,7 +3,8 @@ set -euo pipefail
 
 CLOUD="${1:?usage: deploy-worker.sh aws|gcp}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DEMO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$DEMO_DIR/../.." && pwd)"
 TAG="${TAG:-$(date +%Y%m%d%H%M%S)}"
 
 case "$CLOUD" in
@@ -40,8 +41,11 @@ case "$CLOUD" in
     ;;
 esac
 
+# Pin the context now: the build takes minutes, and another terminal may switch kubectl meanwhile.
+KUBE_CONTEXT="$(kubectl config current-context)"
+
 # Both clusters run amd64 nodes; build for them regardless of the laptop's arch.
-docker build --platform linux/amd64 -t "$IMAGE" "$SCRIPT_DIR"
+docker build --platform linux/amd64 -t "$IMAGE" "$DEMO_DIR"
 # Layers the registry already has are skipped, so a retry only re-sends what didn't finish.
 for attempt in 1 2 3 4 5; do
   docker push "$IMAGE" && break
@@ -50,5 +54,5 @@ for attempt in 1 2 3 4 5; do
   sleep 5
 done
 
-IMAGE="$IMAGE" CLOUD="$CLOUD" envsubst '${IMAGE} ${CLOUD}' < "$SCRIPT_DIR/k8s/worker.yaml" | kubectl apply -f -
-kubectl -n temporal rollout status deployment/failover-worker --timeout=180s
+IMAGE="$IMAGE" CLOUD="$CLOUD" envsubst '${IMAGE} ${CLOUD}' < "$SCRIPT_DIR/worker.yaml" | kubectl --context "$KUBE_CONTEXT" apply -f -
+kubectl --context "$KUBE_CONTEXT" -n temporal rollout status deployment/failover-worker --timeout=180s

@@ -21,8 +21,8 @@ PresentationWorkflow.run()          started live on stage, waits until terminate
 | `src/…/WorkerMain.java` | Worker; configured by env vars (below) |
 | `src/…/UiMain.java`, `src/main/resources/index.html` | Browser UI: the slide, Previous / Next buttons (arrow keys work too), and the Temporal UI for the workflow in an iframe (`u` hides it) |
 | `Dockerfile` | Multi-stage Maven build → JRE 21 image |
-| `k8s/worker.yaml` | Deployment in the `temporal` namespace, pointed at the local frontend |
-| `deploy-worker.sh` | Builds, pushes to ECR or Artifact Registry, applies the Deployment |
+| `k8s/` | Deploy to the EKS and GKE clusters |
+| `local/` | Two replicated clusters in Docker Compose |
 
 Worker env vars: `TEMPORAL_ADDRESS` (default `localhost:7233`), `TEMPORAL_NAMESPACE`
 (`replicated`), `TASK_QUEUE` (`replicated-demo`), `CLOUD` (`local`). The UI also reads
@@ -33,137 +33,18 @@ port. `UiMain` proxies `/temporal/*` to `TEMPORAL_UI`, which puts both on one or
 work, the Temporal UI must be served under `/temporal` (`--ui-public-path /temporal` for
 `start-dev`). The iframe shows the workflow page and updates live as the clicks land.
 
-## Prerequisites
+## Ways to run it
 
-Both clusters are deployed and connected, and the `replicated` namespace exists, as in steps 1–7
-of the [global-namespace guide](../README.md). You also need Docker and `envsubst`
-(`brew install gettext`).
+- **EKS + GKE, with failover:** [k8s/README.md](k8s/README.md)
+- **Two replicated clusters in Docker Compose, with failover:** [local/README.md](local/README.md)
+- **One local dev server, no failover:** below
 
-## 1. Deploy a worker in each cloud
+## Run locally on one cluster
 
-From the repo root, in the matching terminal:
-
-```sh
-# terminal AWS
-./global-namespace/demo/deploy-worker.sh aws
-
-# terminal GCP
-./global-namespace/demo/deploy-worker.sh gcp
-```
-
-The script creates the registry repo if needed (`temporal-failover-worker` in ECR,
-`temporal-demo` in Artifact Registry), builds for `linux/amd64`, pushes, switches kubectl to that
-cluster, and applies `k8s/worker.yaml` with `CLOUD` set to `aws` or `gcp`. Each worker talks only
-to its **local** frontend: `temporal-frontend.temporal.svc.cluster.local:7233`.
-
-If the GKE pod is stuck in `ImagePullBackOff`, the node service account can't read Artifact
-Registry:
-
-```sh
-PROJECT_NUMBER="$(gcloud projects describe "$TF_VAR_project_id" --format='value(projectNumber)')"
-gcloud artifacts repositories add-iam-policy-binding temporal-demo --location "$TF_VAR_region" \
-  --member "serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-  --role roles/artifactregistry.reader
-```
-
-## 2. Open the UI on the laptop
-
-The UI talks to one frontend for the whole talk. Port-forward the AWS one:
-
-```sh
-# terminal AWS
-kubectl -n temporal port-forward svc/temporal-frontend 7233:7233
-
-# terminal UI
-cd global-namespace/demo && mvn -q package
-java -cp target/failover-worker.jar io.temporal.demo.failover.UiMain
-open http://localhost:8080
-```
-
-Until the workflow exists, the footer shows `workflow not found`. The page keeps checking, so
-slide 1 appears by itself when the workflow starts.
-
-The iframe needs the cluster's Temporal UI under `/temporal`, reached through `TEMPORAL_UI`.
-The Helm values here don't set a public path yet.
-
-## 3. Start the workflow on stage (namespace active on AWS)
-
-```sh
-temporal workflow start --address localhost:7233 --namespace replicated \
-  --task-queue replicated-demo --type PresentationWorkflow --workflow-id presentation
-```
-
-Slide 1 appears, served by `aws`, and the iframe switches to the new run. Each Next/Previous
-click is one Workflow Update.
-
-## 4. Fail over to GCP
-
-```sh
-# terminal GCP
-kubectl -n temporal exec deploy/temporal-admintools -- \
-  temporal operator namespace update --namespace replicated --active-cluster gcp
-```
-
-Click Next. The footer now says `served by gcp (failover-worker-…)`, and the deck is still on the
-right slide. The UI is still connected to the AWS frontend. With `selected-apis-forwarding`,
-`UpdateWorkflowExecution` is forwarded to the active cluster. Fail back with
-`--active-cluster aws`.
-
-Things to try:
-
-- **Kill the active side's worker** (`kubectl scale deploy/failover-worker --replicas=0`). The
-  click hangs. When you scale back up, the update completes on the same slide.
-- **Start from the passive side.** With `selected-apis-forwarding`, the call is forwarded to the
-  active cluster.
-- **Unplanned failover.** Fail over while the active side is unreachable. Clicks that hadn't
-  replicated yet are lost, and the deck may step back a slide on the new side.
-
-
-
-## Clean up
-
-```sh
-temporal workflow terminate --namespace replicated --workflow-id presentation
-kubectl -n temporal delete deployment failover-worker   # in each cluster
-```
-
-
-## Run locally
-
-### One cluster
-
+### Build
 ```sh
 cd global-namespace/demo
 mvn package
-temporal server start-dev --namespace replicated --ui-public-path /temporal &
-CLOUD=local java -jar target/failover-worker.jar &
-java -cp target/failover-worker.jar io.temporal.demo.failover.UiMain &
-temporal workflow start --namespace replicated --task-queue replicated-demo \
-  --type PresentationWorkflow --workflow-id presentation
-open http://localhost:8080
-```
-
-### Two replicated clusters, with failover
-
-Two Temporal clusters named `aws` and `gcp` in Docker Compose, with a failover script: see
-[local/README.md](local/README.md).
-
-## Clean up
-
-```sh
-temporal workflow terminate --namespace replicated --workflow-id presentation
-kubectl -n temporal delete deployment failover-worker   # in each cluster
-```
-
-
-## Run locally
-
-
-### Build 
-```sh
-cd global-namespace/demo
-mvn package
-
 ```
 
 ### Run the Temporal Server
@@ -173,21 +54,23 @@ temporal server start-dev --namespace replicated --ui-public-path /temporal
 
 ### (new terminal) Run the worker
 ```sh
-CLOUD=local java -jar target/failover-worker.jar 
+CLOUD=local java -jar target/failover-worker.jar
 ```
 
-
-
-### (new Terminal) Start the workflow with the presentation
+### (new terminal) Start the workflow with the presentation
 ```sh
 temporal workflow start --namespace replicated --task-queue replicated-demo \
   --type PresentationWorkflow --workflow-id presentation
 ```
 
-
-### (new Terminal) Start the UI / start the presentation
+### (new terminal) Start the UI / start the presentation
 ```sh
 java -cp target/failover-worker.jar io.temporal.demo.failover.UiMain
 
 open http://localhost:8080
+```
+
+### Clean up
+```sh
+temporal workflow terminate --namespace replicated --workflow-id presentation
 ```

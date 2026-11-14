@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# ./local/failover.sh gcp   make gcp the active cluster for the replicated namespace
-# ./local/failover.sh       show which cluster each side thinks is active
+# ./failover.sh gcp   make gcp the active cluster for the replicated namespace
+# ./failover.sh       show which cluster each side thinks is active
 set -euo pipefail
 
 # The global CLI profile can carry Cloud credentials; these commands only talk to the local clusters.
