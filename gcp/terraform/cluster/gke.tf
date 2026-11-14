@@ -15,6 +15,12 @@ resource "google_container_cluster" "temporal" {
     channel = "REGULAR"
   }
 
+  addons_config {
+    gcp_filestore_csi_driver_config {
+      enabled = false
+    }
+  }
+
   ip_allocation_policy {
     cluster_secondary_range_name  = "pods"
     services_secondary_range_name = "services"
