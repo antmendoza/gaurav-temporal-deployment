@@ -229,8 +229,11 @@ kubectl -n temporal get svc temporal-web -o jsonpath='{.status.loadBalancer.ingr
 kubectl -n temporal get svc temporal-web -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 ```
 
-Open `http://<address>:8080/namespaces/replicated/workflows`. If your IP isn't in the allowlist,
-run `kubectl -n temporal port-forward svc/temporal-web 8080:8080` and use `localhost:8080` instead.
+Open `http://<address>:8080/namespaces/replicated/workflows`. `aws-values.yaml` and
+`gcp-values.yaml` open the Web UI load balancer to `0.0.0.0/0`, so anyone with the address can
+reach it. The UI has no auth: anyone can also terminate or reset workflows. To lock it down again,
+delete the `web:` block from both files and redeploy, and use
+`kubectl -n temporal port-forward svc/temporal-web 8080:8080` if your IP isn't in the allowlist.
 
 ## Monitor replication lag
 

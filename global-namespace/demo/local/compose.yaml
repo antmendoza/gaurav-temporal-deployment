@@ -79,3 +79,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "8080:8080"
+
+  # Order load: docker compose --profile load up -d load
+  load:
+    <<: *worker
+    profiles: [load]
+    entrypoint: ["java", "-cp", "/app/worker.jar", "io.temporal.demo.failover.LoadMain"]
+    environment:
+      TEMPORAL_ADDRESS: aws:7233
+      START_EVERY_SECONDS: ${START_EVERY_SECONDS:-10}

@@ -12,6 +12,7 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <temporal.version>1.40.0</temporal.version>
+    <micrometer.version>1.13.6</micrometer.version>
   </properties>
 
   <dependencies>
@@ -19,6 +20,17 @@
       <groupId>io.temporal</groupId>
       <artifactId>temporal-sdk</artifactId>
       <version>${temporal.version}</version>
+    </dependency>
+    <!-- Pinned: the SDK pulls micrometer-core 1.9, which doesn't match the Prometheus registry. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+      <version>${micrometer.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+      <version>${micrometer.version}</version>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>

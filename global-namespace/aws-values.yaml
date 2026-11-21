@@ -3,7 +3,7 @@ server:
     service:
       annotations:
         # base allowlist + GCP Cloud NAT egress, for replication
-        service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32,104.28.191.43/32,104.28.25.150/32,<GCP_NAT_IP>/32"
+        service.beta.kubernetes.io/load-balancer-source-ranges: "104.28.24.190/32,104.28.184.229/32,109.175.246.138/32,104.28.191.43/32,104.28.25.150/32,207.175.134.101/32"
   config:
     clusterMetadata:
       enableGlobalNamespace: true
@@ -20,3 +20,9 @@ server:
     dcRedirectionPolicy:
       policy: selected-apis-forwarding
       toDC: ""
+web:
+  service:
+    annotations:
+      # Open to everyone so any attendee can follow the demo. The Web UI has no auth: anyone with
+      # the address can also terminate or reset workflows.
+      service.beta.kubernetes.io/load-balancer-source-ranges: "0.0.0.0/0"

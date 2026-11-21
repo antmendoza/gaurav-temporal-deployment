@@ -5,7 +5,7 @@ on the laptop, and a failover of the `replicated` namespace mid-talk.
 
 | File | What it is |
 |---|---|
-| `worker.yaml` | Deployment in the `temporal` namespace, pointed at the local frontend |
+| `worker.yaml` | Deployment in the `temporal` namespace, pointed at the local frontend. Its `prometheus.io/*` annotations let the cluster's Prometheus scrape the SDK metrics on `:8077` |
 | `deploy-worker.sh` | Builds, pushes to ECR or Artifact Registry, applies `worker.yaml` |
 
 ## Prerequisites
@@ -93,6 +93,38 @@ Things to try:
   active cluster.
 - **Unplanned failover.** Fail over while the active side is unreachable. Clicks that hadn't
   replicated yet are lost, and the deck may step back a slide on the new side.
+
+## Scenario: steady order load
+
+Starts an `OrderWorkflow` (three ~2 s activities) every `START_EVERY_SECONDS`, so workflows are in
+flight when you fail over. See [../README.md](../README.md#scenario-steady-order-load).
+
+The workers need an image that includes `OrderWorkflow`. If they were deployed before this
+scenario existed, redeploy both (step 1):
+```sh
+# terminal AWS
+./global-namespace/demo/k8s/deploy-worker.sh aws
+
+# terminal GCP
+./global-namespace/demo/k8s/deploy-worker.sh gcp
+```
+
+Run the load generator on the laptop, through the AWS port-forward from step 2:
+```sh
+# terminal LOAD
+cd global-namespace/demo && mvn -q package
+START_EVERY_SECONDS=10 TEMPORAL_ADDRESS=localhost:7233 \
+  java -cp target/failover-worker.jar io.temporal.demo.failover.LoadMain
+```
+
+Fail over as in step 4. After the failover, starts that reach the AWS frontend are forwarded to
+GCP, and running orders finish their remaining steps there. The result lists where each step ran:
+```sh
+temporal workflow list --address localhost:7233 --namespace replicated --query 'WorkflowType="OrderWorkflow"'
+temporal workflow result --address localhost:7233 --namespace replicated --workflow-id <order-id>
+```
+
+Stop the load with Ctrl-C.
 
 ## Clean up
 

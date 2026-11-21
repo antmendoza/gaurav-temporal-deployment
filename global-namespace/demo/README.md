@@ -25,7 +25,8 @@ PresentationWorkflow.run()          started live on stage, waits until terminate
 | `local/` | Two replicated clusters in Docker Compose |
 
 Worker env vars: `TEMPORAL_ADDRESS` (default `localhost:7233`), `TEMPORAL_NAMESPACE`
-(`replicated`), `TASK_QUEUE` (`replicated-demo`), `CLOUD` (`local`). The UI also reads
+(`replicated`), `TASK_QUEUE` (`replicated-demo`), `CLOUD` (`local`), `METRICS_PORT` (`8077`, SDK
+metrics for Prometheus at `/metrics`). The UI also reads
 `WORKFLOW_ID` (`presentation`), `PORT` (`8080`) and `TEMPORAL_UI` (`http://localhost:8233`).
 
 The Temporal UI sends `X-Frame-Options: SAMEORIGIN`, so the deck can't iframe it from another
@@ -73,4 +74,37 @@ open http://localhost:8080
 ### Clean up
 ```sh
 temporal workflow terminate --namespace replicated --workflow-id presentation
+```
+
+## Scenario: steady order load
+
+A second scenario keeps workflows in flight during the failover. `LoadMain` starts an
+`OrderWorkflow` every `START_EVERY_SECONDS` (default `10`). Each one runs three activities in
+sequence, `reserve`, `charge` and `ship`, each taking about 2 s, and returns which cloud and pod
+ran each step. The same worker serves both scenarios on the same task queue.
+
+```
+OrderWorkflow.run(orderId)   ~6 s
+  reserve()  ~2 s  ->  "reserve: aws (worker-aws)"
+  charge()   ~2 s  ->  "charge: aws (worker-aws)"
+  ship()     ~2 s  ->  "ship: gcp (worker-gcp)"     <- failover landed mid-workflow
+```
+
+Locally, with the worker running:
+```sh
+START_EVERY_SECONDS=10 java -cp target/failover-worker.jar io.temporal.demo.failover.LoadMain
+```
+
+In the Compose setup (`local/`), it's behind a profile so `up` doesn't start it:
+```sh
+START_EVERY_SECONDS=5 docker compose --profile load up -d load
+docker compose stop load
+```
+
+`LoadMain` reads `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE` and `TASK_QUEUE` like the worker. It
+talks to one frontend; a start that reaches the standby cluster is forwarded by
+`selected-apis-forwarding`. Each order's result shows where its steps ran:
+```sh
+temporal workflow list --namespace replicated --query 'WorkflowType="OrderWorkflow"'
+temporal workflow result --namespace replicated --workflow-id <order-id>
 ```

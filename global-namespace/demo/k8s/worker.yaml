@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: failover-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8077"
+        prometheus.io/job: failover-worker
     spec:
       containers:
         - name: worker

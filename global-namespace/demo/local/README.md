@@ -84,3 +84,36 @@ the active cluster. Server 1.32 doesn't forward Workflow Updates from the standb
 
 The first click after failover takes about 2 s. `dynamicconfig.yaml` shortens matching's long
 poll to 5 s.
+
+## Scenario: steady order load
+
+Starts an `OrderWorkflow` (three ~2 s activities) every `START_EVERY_SECONDS`, so workflows are in
+flight when you fail over. See [../README.md](../README.md#scenario-steady-order-load).
+
+The workers need an image that includes `OrderWorkflow`. If you built before this scenario existed,
+rebuild first:
+```sh
+docker compose up -d --build
+```
+
+Start the load (default every 10 s) and follow the order steps:
+```sh
+START_EVERY_SECONDS=10 docker compose --profile load up -d load
+docker compose logs -f load worker-aws worker-gcp
+```
+
+Fail over mid-load:
+```sh
+./failover.sh gcp
+```
+
+Orders that were running finish on gcp. The result lists where each step ran:
+```sh
+temporal workflow list --address 127.0.0.1:7233 --namespace replicated --query 'WorkflowType="OrderWorkflow"'
+temporal workflow result --address 127.0.0.1:7233 --namespace replicated --workflow-id <order-id>
+```
+
+Stop the load:
+```sh
+docker compose stop load
+```
